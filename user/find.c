@@ -1,71 +1,76 @@
 #include "kernel/types.h"
+#include "kernel/fcntl.h"
 #include "kernel/stat.h"
 #include "user/user.h"
 #include "kernel/fs.h"
+/*
+	将路径格式化为文件名
+*/
+char* fmt_name(char *path){
+  static char buf[DIRSIZ+1];
+  char *p;
 
-void find(char *path,char *file)
-{
-  char buf[512], *p;//buf存储路径地址，p始终指向buf的尾
-  int fd;//文件标识符
-  struct dirent de;//不知道有啥用
-  struct stat st;//保存打开的文件的状态信息
-
-  if((fd = open(path, 0)) < 0){//open发生错误会返回-1
-    fprintf(2, "find: cannot open %s\n", path);
-    return;
-  }
-
-  if(fstat(fd, &st) < 0|| T_DIR != st.type){//fstat(): Return info about an open ﬁle
-    fprintf(2, "find:the first arg must be dir path\n", path);
-    close(fd);
-    return;
-  }
-
-  while(read(fd, &de, sizeof(de)) == sizeof(de))
-  {
-    if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf)
-    {
-        printf("ls: path too long\n");
-        break;
-    }
-    strcpy(buf, path);//把地址路径复制到buf
-    p = buf+strlen(buf);//p指向buf的尾巴
-    *p++ = '/';
-    if(de.inum == 0)
-        continue;
-    memmove(p, de.name, DIRSIZ);
-    p[DIRSIZ] = 0;
-    if(stat(buf, &st) < 0)
-    {
-        printf("find: cannot stat %s\n", buf);
-        continue;
-    }    
-  }
-
-  switch(st.type){
-  case T_FILE:  //如果是文件?
-    if(strcmp(file,de.name)==0)
-    {
-        printf("%s\n",buf);
-    }
-    break;
-  case T_DIR: //如果是目录
-    if(strcmp(de.name,".")!=0&&strcmp(de.name,"..")!=0){
-      find(buf,file);
-    }
-    break;
-  }
-  close(fd);
+  // Find first character after last slash.
+  for(p=path+strlen(path); p >= path && *p != '/'; p--);
+  p++;
+  memmove(buf, p, strlen(p)+1);
+  return buf;
+}
+/*
+	系统文件名与要查找的文件名，若一致，打印系统文件完整路径
+*/
+void eq_print(char *fileName, char *findName){
+	if(strcmp(fmt_name(fileName), findName) == 0){
+		printf("%s\n", fileName);
+	}
+}
+/*
+	在某路径中查找某文件
+*/
+void find(char *path, char *findName){
+	int fd;
+	struct stat st;	
+	if((fd = open(path, O_RDONLY)) < 0){
+		fprintf(2, "find: cannot open %s\n", path);
+		return;
+	}
+	if(fstat(fd, &st) < 0){
+		fprintf(2, "find: cannot stat %s\n", path);
+		close(fd);
+		return;
+	}
+	char buf[512], *p;	
+	struct dirent de;
+	switch(st.type){	
+		case T_FILE:
+			eq_print(path, findName);			
+			break;
+		case T_DIR:
+			if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){
+				printf("find: path too long\n");
+				break;
+			}
+			strcpy(buf, path);
+			p = buf+strlen(buf);
+			*p++ = '/';
+			while(read(fd, &de, sizeof(de)) == sizeof(de)){
+				//printf("de.name:%s, de.inum:%d\n", de.name, de.inum);
+				if(de.inum == 0 || de.inum == 1 || strcmp(de.name, ".")==0 || strcmp(de.name, "..")==0)
+					continue;				
+				memmove(p, de.name, strlen(de.name));
+				p[strlen(de.name)] = 0;
+				find(buf, findName);
+			}
+			break;
+	}
+	close(fd);	
 }
 
-int main(int argc, char *argv[])
-{
-    if(argc <= 2||argc>3)
-    {
-        fprintf(2, "usage: find <path> <expression>\n");
-        exit();
-    }
-    //fprintf(2,"%s\n%s",argv[1],argv[2]);
-    find(argv[1],argv[2]);
-    exit();
+int main(int argc, char *argv[]){
+	if(argc < 3){
+		printf("find: find <path> <fileName>\n");
+		exit();
+	}
+	find(argv[1], argv[2]);
+	exit();
 }
