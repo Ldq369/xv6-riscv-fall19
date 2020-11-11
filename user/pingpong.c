@@ -15,9 +15,9 @@ int main(int argc,char *argv[])
     if((pid = fork()) > 0)
     {
         close(parent_fd[0]);
-        write(parent_fd[1],"ping",4);
+        write(parent_fd[1],"ping",strlen("ping"));
         close(child_fd[1]);
-        read(child_fd[0],buf,sizeof(buf));
+        read(child_fd[0],buf,4);
         fprintf(2,"%d:recieved %s\n",getpid(),buf);//The number before ":" is the process id of the process printing the output. You can get the process id by calling the system call getpid. 
         exit();
     }
@@ -28,7 +28,7 @@ int main(int argc,char *argv[])
         read(parent_fd[0],buf,4);
         fprintf(2,"%d:recieved %s\n",getpid(),buf);
         close(child_fd[0]);
-        write(child_fd[1],"pong",sizeof(buf));
+        write(child_fd[1],"pong",strlen("pong"));
         exit();
     }   
 }
